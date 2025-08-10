@@ -169,13 +169,7 @@ class KbService {
         const fullPath = path.join(repoPath, filePath);
         
         // 后台异步更新仓库（不等待结果）
-        this.gitSyncWorker.syncRepository(
-          this.defaultRepoUrl,
-          this.reposBasePath,
-          false // 非强制同步
-        ).catch(error => {
-          console.warn('后台同步失败:', error.message);
-        });
+        this.backgroundSync();
         
         return await this.readIssueFromPath(fullPath, filePath);
       }
