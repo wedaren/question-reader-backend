@@ -1,3 +1,7 @@
 node_modules/
+.env.local
+.env.production
 repos/
-server.log
+logs/
+*.log
+.DS_Store

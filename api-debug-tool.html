@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>问题阅读器 API 调试工具</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6; 
+            color: #333; 
+            background: #f5f5f5;
+        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; 
+            padding: 30px 0; 
+            margin-bottom: 30px;
+            border-radius: 8px;
+        }
+        .header h1 { text-align: center; font-size: 2.5em; margin-bottom: 10px; }
+        .header p { text-align: center; opacity: 0.9; font-size: 1.1em; }
+        
+        .api-section {
+            background: white;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .section-header {
+            background: #2c3e50;
+            color: white;
+            padding: 15px 20px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .section-header:hover { background: #34495e; }
+        .section-body { padding: 20px; display: none; }
+        .section-body.active { display: block; }
+        
+        .method { 
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            color: white;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .get { background: #27ae60; }
+        .post { background: #e74c3c; }
+        
+        .endpoint { 
+            background: #ecf0f1;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: 'Monaco', 'Consolas', monospace;
+        }
+        
+        .test-area {
+            border: 2px dashed #bdc3c7;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            background: #fafafa;
+        }
+        
+        input, button, textarea, select {
+            padding: 8px 12px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+            padding: 10px 20px;
+        }
+        button:hover { background: #2980b9; }
+        button:disabled { background: #95a5a6; cursor: not-allowed; }
+        
+        .response-area {
+            margin-top: 15px;
+            padding: 15px;
+            background: #2c3e50;
+            color: #ecf0f1;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .status-success { border-left: 4px solid #27ae60; }
+        .status-error { border-left: 4px solid #e74c3c; }
+        
+        .config-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+        
+        .toggle-icon { 
+            transition: transform 0.3s ease;
+            font-size: 1.2em;
+        }
+        .toggle-icon.rotated { transform: rotate(180deg); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔧 问题阅读器 API 调试工具</h1>
+            <p>微信小程序后台接口测试与文档</p>
+        </div>
+        
+        <!-- 配置面板 -->
+        <div class="config-panel">
+            <label>服务地址:</label>
+            <input type="text" id="baseUrl" value="http://localhost:3000" style="width: 200px;">
+            <button onclick="updateBaseUrl()">更新</button>
+        </div>
+
+        <!-- 1. 健康检查 -->
+        <div class="api-section">
+            <div class="section-header" onclick="toggleSection(this)">
+                <span><span class="method get">GET</span>健康检查</span>
+                <span class="toggle-icon">▼</span>
+            </div>
+            <div class="section-body">
+                <div class="endpoint">/health</div>
+                <p><strong>描述:</strong> 检查服务是否正常运行</p>
+                
+                <div class="test-area">
+                    <button onclick="testHealth()">🧪 测试健康检查</button>
+                    <div id="health-response" class="response-area" style="display:none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. 获取知识库结构 -->
+        <div class="api-section">
+            <div class="section-header" onclick="toggleSection(this)">
+                <span><span class="method get">GET</span>获取知识库结构</span>
+                <span class="toggle-icon">▼</span>
+            </div>
+            <div class="section-body">
+                <div class="endpoint">/v1/kb/structure</div>
+                <p><strong>描述:</strong> 获取完整的问题树结构和关注列表</p>
+                <p><strong>缓存:</strong> 支持 ETag 缓存，5分钟有效期</p>
+                
+                <div class="test-area">
+                    <button onclick="testStructure()">🧪 测试获取结构</button>
+                    <button onclick="testStructureWithCache()">🔄 测试缓存机制</button>
+                    <div id="structure-response" class="response-area" style="display:none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. 获取问题内容 -->
+        <div class="api-section">
+            <div class="section-header" onclick="toggleSection(this)">
+                <span><span class="method get">GET</span>获取问题内容</span>
+                <span class="toggle-icon">▼</span>
+            </div>
+            <div class="section-body">
+                <div class="endpoint">/v1/kb/issue?path={filePath}</div>
+                <p><strong>描述:</strong> 根据文件路径获取具体问题的详细内容</p>
+                
+                <div class="test-area">
+                    <label>文件路径:</label>
+                    <input type="text" id="issuePath" value="20250810-101411-835.md" style="width: 300px;">
+                    <button onclick="testIssue()">🧪 测试获取问题</button>
+                    <button onclick="fillAvailablePaths()">📋 获取可用路径</button>
+                    <div id="issue-response" class="response-area" style="display:none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. 同步状态 -->
+        <div class="api-section">
+            <div class="section-header" onclick="toggleSection(this)">
+                <span><span class="method get">GET</span>获取同步状态</span>
+                <span class="toggle-icon">▼</span>
+            </div>
+            <div class="section-body">
+                <div class="endpoint">/v1/kb/sync-status</div>
+                <p><strong>描述:</strong> 查看 Git 仓库的同步状态</p>
+                
+                <div class="test-area">
+                    <button onclick="testSyncStatus()">🧪 测试同步状态</button>
+                    <button onclick="startAutoRefresh()">🔄 自动刷新</button>
+                    <button onclick="stopAutoRefresh()">⏹️ 停止刷新</button>
+                    <div id="sync-status-response" class="response-area" style="display:none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. 手动同步 -->
+        <div class="api-section">
+            <div class="section-header" onclick="toggleSection(this)">
+                <span><span class="method post">POST</span>手动触发同步</span>
+                <span class="toggle-icon">▼</span>
+            </div>
+            <div class="section-body">
+                <div class="endpoint">/v1/kb/force-sync</div>
+                <p><strong>描述:</strong> 手动触发 Git 仓库同步</p>
+                <p><strong>注意:</strong> 此操作可能需要较长时间完成</p>
+                
+                <div class="test-area">
+                    <button onclick="testForceSync()">🧪 测试强制同步</button>
+                    <div id="force-sync-response" class="response-area" style="display:none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. 批量测试 -->
+        <div class="api-section">
+            <div class="section-header" onclick="toggleSection(this)">
+                <span>🚀 批量测试工具</span>
+                <span class="toggle-icon">▼</span>
+            </div>
+            <div class="section-body">
+                <p><strong>描述:</strong> 一键测试所有 API 接口</p>
+                
+                <div class="test-area">
+                    <button onclick="runAllTests()">🧪 运行所有测试</button>
+                    <button onclick="testPerformance()">⚡ 性能测试</button>
+                    <button onclick="testConcurrency()">🔄 并发测试</button>
+                    <div id="batch-test-response" class="response-area" style="display:none;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let baseUrl = 'http://localhost:3000';
+        let refreshInterval = null;
+        let etag = null;
+
+        function updateBaseUrl() {
+            baseUrl = document.getElementById('baseUrl').value;
+            console.log('Base URL updated to:', baseUrl);
+        }
+
+        function toggleSection(header) {
+            const body = header.nextElementSibling;
+            const icon = header.querySelector('.toggle-icon');
+            
+            if (body.classList.contains('active')) {
+                body.classList.remove('active');
+                icon.classList.remove('rotated');
+            } else {
+                body.classList.add('active');
+                icon.classList.add('rotated');
+            }
+        }
+
+        function showResponse(elementId, response, status) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = `response-area ${status >= 400 ? 'status-error' : 'status-success'}`;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            element.textContent = `[${timestamp}] HTTP ${status}\n\n${response}`;
+        }
+
+        async function makeRequest(url, options = {}) {
+            try {
+                const response = await fetch(baseUrl + url, {
+                    ...options,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+
+                const data = await response.text();
+                let jsonData;
+                try {
+                    jsonData = JSON.parse(data);
+                } catch (e) {
+                    jsonData = data;
+                }
+
+                return {
+                    status: response.status,
+                    data: jsonData,
+                    headers: response.headers
+                };
+            } catch (error) {
+                return {
+                    status: 0,
+                    data: `网络错误: ${error.message}`
+                };
+            }
+        }
+
+        async function testHealth() {
+            const result = await makeRequest('/health');
+            showResponse('health-response', JSON.stringify(result.data, null, 2), result.status);
+        }
+
+        async function testStructure() {
+            const result = await makeRequest('/v1/kb/structure');
+            
+            if (result.headers) {
+                etag = result.headers.get('etag');
+            }
+            
+            let responseText = JSON.stringify(result.data, null, 2);
+            
+            if (result.data && typeof result.data === 'object') {
+                const nodeCount = result.data.tree?.rootNodes?.length || 0;
+                const focusCount = result.data.focused?.focusList?.length || 0;
+                responseText += `\n\n📊 统计信息:\n- 根节点数量: ${nodeCount}\n- 关注项数量: ${focusCount}\n- 版本: ${result.data.version}`;
+            }
+            
+            showResponse('structure-response', responseText, result.status);
+        }
+
+        async function testStructureWithCache() {
+            if (!etag) {
+                alert('请先执行一次普通的结构测试以获取 ETag');
+                return;
+            }
+
+            const result = await makeRequest('/v1/kb/structure', {
+                headers: {
+                    'If-None-Match': etag
+                }
+            });
+            
+            let responseText = `使用 ETag: ${etag}\n\n`;
+            if (result.status === 304) {
+                responseText += '✅ 缓存命中，服务器返回 304 Not Modified';
+            } else {
+                responseText += JSON.stringify(result.data, null, 2);
+            }
+            
+            showResponse('structure-response', responseText, result.status);
+        }
+
+        async function testIssue() {
+            const path = document.getElementById('issuePath').value;
+            if (!path) {
+                alert('请输入文件路径');
+                return;
+            }
+
+            const result = await makeRequest(`/v1/kb/issue?path=${encodeURIComponent(path)}`);
+            let responseText = JSON.stringify(result.data, null, 2);
+            
+            if (result.data && result.data.content) {
+                const contentLength = result.data.content.length;
+                const wordCount = result.data.content.split(/\s+/).length;
+                responseText += `\n\n📊 内容统计:\n- 字符数: ${contentLength}\n- 单词数: ${wordCount}`;
+            }
+            
+            showResponse('issue-response', responseText, result.status);
+        }
+
+        async function fillAvailablePaths() {
+            const result = await makeRequest('/v1/kb/structure');
+            if (result.data && result.data.tree && result.data.tree.rootNodes) {
+                const paths = result.data.tree.rootNodes.map(node => node.filePath).slice(0, 5);
+                if (paths.length > 0) {
+                    document.getElementById('issuePath').value = paths[0];
+                    alert(`找到 ${paths.length} 个可用路径，已填入第一个: ${paths[0]}`);
+                }
+            }
+        }
+
+        async function testSyncStatus() {
+            const result = await makeRequest('/v1/kb/sync-status');
+            let responseText = JSON.stringify(result.data, null, 2);
+            
+            if (result.data && result.data.status) {
+                const statusEmoji = {
+                    'idle': '😴',
+                    'syncing': '🔄',
+                    'completed': '✅',
+                    'failed': '❌',
+                    'not_configured': '⚠️'
+                };
+                responseText = `${statusEmoji[result.data.status] || '🔍'} 状态: ${result.data.status}\n\n` + responseText;
+            }
+            
+            showResponse('sync-status-response', responseText, result.status);
+        }
+
+        async function testForceSync() {
+            showResponse('force-sync-response', '🔄 正在触发同步，请稍候...', 200);
+            
+            const result = await makeRequest('/v1/kb/force-sync', { method: 'POST' });
+            showResponse('force-sync-response', JSON.stringify(result.data, null, 2), result.status);
+        }
+
+        function startAutoRefresh() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+            
+            refreshInterval = setInterval(() => {
+                testSyncStatus();
+            }, 2000);
+            
+            console.log('已启动自动刷新同步状态 (每2秒)');
+        }
+
+        function stopAutoRefresh() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+                console.log('已停止自动刷新');
+            }
+        }
+
+        async function runAllTests() {
+            const responseArea = document.getElementById('batch-test-response');
+            responseArea.style.display = 'block';
+            responseArea.className = 'response-area';
+            
+            let output = '🚀 开始批量测试...\n\n';
+            responseArea.textContent = output;
+            
+            const tests = [
+                { name: '健康检查', url: '/health' },
+                { name: '知识库结构', url: '/v1/kb/structure' },
+                { name: '同步状态', url: '/v1/kb/sync-status' }
+            ];
+            
+            for (const test of tests) {
+                output += `📊 测试 ${test.name}...\n`;
+                responseArea.textContent = output;
+                
+                const startTime = Date.now();
+                const result = await makeRequest(test.url);
+                const duration = Date.now() - startTime;
+                
+                const status = result.status < 400 ? '✅' : '❌';
+                output += `${status} ${test.name}: HTTP ${result.status} (${duration}ms)\n`;
+                responseArea.textContent = output;
+            }
+            
+            output += '\n🎉 批量测试完成！';
+            responseArea.textContent = output;
+        }
+
+        async function testPerformance() {
+            const responseArea = document.getElementById('batch-test-response');
+            responseArea.style.display = 'block';
+            responseArea.className = 'response-area';
+            
+            let output = '⚡ 开始性能测试...\n\n';
+            responseArea.textContent = output;
+            
+            const testCount = 5;
+            const times = [];
+            
+            for (let i = 0; i < testCount; i++) {
+                const startTime = Date.now();
+                const result = await makeRequest('/v1/kb/structure');
+                const duration = Date.now() - startTime;
+                times.push(duration);
+                
+                output += `请求 ${i + 1}: ${duration}ms\n`;
+                responseArea.textContent = output;
+            }
+            
+            const avgTime = times.reduce((a, b) => a + b, 0) / times.length;
+            const minTime = Math.min(...times);
+            const maxTime = Math.max(...times);
+            
+            output += `\n📊 性能统计:\n`;
+            output += `平均响应时间: ${avgTime.toFixed(2)}ms\n`;
+            output += `最快响应: ${minTime}ms\n`;
+            output += `最慢响应: ${maxTime}ms\n`;
+            
+            responseArea.textContent = output;
+        }
+
+        async function testConcurrency() {
+            const responseArea = document.getElementById('batch-test-response');
+            responseArea.style.display = 'block';
+            responseArea.className = 'response-area';
+            
+            let output = '🔄 开始并发测试 (5个并发请求)...\n\n';
+            responseArea.textContent = output;
+            
+            const startTime = Date.now();
+            const promises = Array.from({length: 5}, (_, i) => 
+                makeRequest('/v1/kb/structure').then(result => ({
+                    id: i + 1,
+                    status: result.status,
+                    duration: Date.now() - startTime
+                }))
+            );
+            
+            const results = await Promise.all(promises);
+            const totalTime = Date.now() - startTime;
+            
+            results.forEach(result => {
+                output += `请求 ${result.id}: HTTP ${result.status}\n`;
+            });
+            
+            const successCount = results.filter(r => r.status < 400).length;
+            output += `\n📊 并发测试结果:\n`;
+            output += `总耗时: ${totalTime}ms\n`;
+            output += `成功请求: ${successCount}/${results.length}\n`;
+            output += `并发能力: ${successCount === results.length ? '✅ 通过' : '❌ 失败'}\n`;
+            
+            responseArea.textContent = output;
+        }
+
+        // 页面加载完成后展开第一个部分
+        document.addEventListener('DOMContentLoaded', function() {
+            const firstSection = document.querySelector('.section-header');
+            if (firstSection) {
+                toggleSection(firstSection);
+            }
+        });
+    </script>
+</body>
+</html>
