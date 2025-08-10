@@ -365,7 +365,7 @@ interface Issue {
   path: string;         // 文件路径
   title: string;        // 问题标题
   content: string;      // Markdown 内容
-  last_modified: string; // 最后修改时间(ISO格式)
+  lastModified: string; // 最后修改时间(ISO格式)
 }
 ```
 

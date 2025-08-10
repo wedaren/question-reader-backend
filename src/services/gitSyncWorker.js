@@ -37,7 +37,6 @@ class GitSyncWorker {
       console.log(`📋 仓库同步已在队列中: ${repoName}`);
       
       if (background) {
-        // 后台模式：不等待，立即返回状态
         return { 
           success: false, 
           message: '同步已在进行中', 
@@ -47,52 +46,15 @@ class GitSyncWorker {
       
       return await this.syncQueue.get(syncKey);
     }
+
+    // 设置同步任务
+    const syncPromise = this.setupSyncTask(repoUrl, reposBasePath, syncKey, repoName);
     
-    // 创建同步 Promise
-    const syncPromise = this.performSync(repoUrl, reposBasePath);
-    
-    // 添加到队列
-    this.syncQueue.set(syncKey, syncPromise);
-    this.syncStatus.set(syncKey, {
-      status: 'syncing',
-      startTime: Date.now(),
-      repoName,
-      repoUrl
-    });
-    
-    // 后台模式：启动同步但不等待结果
     if (background) {
+      // 后台模式：启动同步但不等待结果
       console.log(`🔄 启动后台同步: ${repoName}`);
+      this.handleBackgroundSync(syncPromise, syncKey, repoName);
       
-      // 异步处理同步结果
-      syncPromise.then(result => {
-        this.syncStatus.set(syncKey, {
-          status: 'completed',
-          startTime: this.syncStatus.get(syncKey).startTime,
-          endTime: Date.now(),
-          repoName,
-          repoUrl
-        });
-        this.syncResults.set(syncKey, result);
-        console.log(`✅ 后台同步完成: ${repoName} (耗时: ${Date.now() - this.syncStatus.get(syncKey).startTime}ms)`);
-      }).catch(error => {
-        this.syncStatus.set(syncKey, {
-          status: 'failed',
-          startTime: this.syncStatus.get(syncKey).startTime,
-          endTime: Date.now(),
-          error: error.message,
-          repoName,
-          repoUrl
-        });
-        console.error(`❌ 后台同步失败: ${repoName}`, error);
-      }).finally(() => {
-        this.syncQueue.delete(syncKey);
-        setTimeout(() => {
-          this.syncResults.delete(syncKey);
-        }, 5 * 60 * 1000);
-      });
-      
-      // 立即返回，不等待同步完成
       return { 
         success: true, 
         message: '后台同步已启动', 
@@ -100,7 +62,19 @@ class GitSyncWorker {
       };
     }
     
-    // 添加到队列
+    // 前台模式：等待同步完成
+    return await this.handleForegroundSync(syncPromise, syncKey, repoName);
+  }
+
+  /**
+   * 设置同步任务
+   * @private
+   */
+  setupSyncTask(repoUrl, reposBasePath, syncKey, repoName) {
+    // 创建同步 Promise
+    const syncPromise = this.performSync(repoUrl, reposBasePath);
+    
+    // 添加到队列和状态跟踪
     this.syncQueue.set(syncKey, syncPromise);
     this.syncStatus.set(syncKey, {
       status: 'syncing',
@@ -109,45 +83,98 @@ class GitSyncWorker {
       repoUrl
     });
     
+    return syncPromise;
+  }
+
+  /**
+   * 处理后台同步
+   * @private
+   */
+  handleBackgroundSync(syncPromise, syncKey, repoName) {
+    syncPromise
+      .then(result => {
+        this.handleSyncSuccess(syncKey, repoName, result, true);
+      })
+      .catch(error => {
+        this.handleSyncError(syncKey, repoName, error, true);
+      })
+      .finally(() => {
+        this.cleanupSync(syncKey);
+      });
+  }
+
+  /**
+   * 处理前台同步
+   * @private
+   */
+  async handleForegroundSync(syncPromise, syncKey, repoName) {
     try {
       const result = await syncPromise;
-      
-      // 更新状态和结果
-      this.syncStatus.set(syncKey, {
-        status: 'completed',
-        startTime: this.syncStatus.get(syncKey).startTime,
-        endTime: Date.now(),
-        repoName,
-        repoUrl
-      });
-      this.syncResults.set(syncKey, result);
-      
-      console.log(`✅ 仓库同步完成: ${repoName} (耗时: ${Date.now() - this.syncStatus.get(syncKey).startTime}ms)`);
+      this.handleSyncSuccess(syncKey, repoName, result, false);
       return result;
-      
     } catch (error) {
-      // 更新错误状态
-      this.syncStatus.set(syncKey, {
-        status: 'failed',
-        startTime: this.syncStatus.get(syncKey).startTime,
-        endTime: Date.now(),
-        error: error.message,
-        repoName,
-        repoUrl
-      });
-      
-      console.error(`❌ 仓库同步失败: ${repoName}`, error);
+      this.handleSyncError(syncKey, repoName, error, false);
       throw error;
-      
     } finally {
-      // 从队列中移除
-      this.syncQueue.delete(syncKey);
-      
-      // 5分钟后清理结果缓存
-      setTimeout(() => {
-        this.syncResults.delete(syncKey);
-      }, 5 * 60 * 1000);
+      this.cleanupSync(syncKey);
     }
+  }
+
+  /**
+   * 处理同步成功
+   * @private
+   */
+  handleSyncSuccess(syncKey, repoName, result, isBackground) {
+    const currentStatus = this.syncStatus.get(syncKey);
+    const duration = Date.now() - currentStatus.startTime;
+    
+    // 更新状态
+    this.syncStatus.set(syncKey, {
+      ...currentStatus,
+      status: 'completed',
+      endTime: Date.now()
+    });
+    
+    // 缓存结果
+    this.syncResults.set(syncKey, result);
+    
+    // 记录日志
+    const logPrefix = isBackground ? '后台' : '';
+    console.log(`✅ ${logPrefix}同步完成: ${repoName} (耗时: ${duration}ms)`);
+  }
+
+  /**
+   * 处理同步错误
+   * @private
+   */
+  handleSyncError(syncKey, repoName, error, isBackground) {
+    const currentStatus = this.syncStatus.get(syncKey);
+    
+    // 更新错误状态
+    this.syncStatus.set(syncKey, {
+      ...currentStatus,
+      status: 'failed',
+      endTime: Date.now(),
+      error: error.message
+    });
+    
+    // 记录错误日志
+    const logPrefix = isBackground ? '后台' : '';
+    console.error(`❌ ${logPrefix}同步失败: ${repoName}`, error);
+  }
+
+  /**
+   * 清理同步资源
+   * @private
+   */
+  cleanupSync(syncKey) {
+    // 从队列中移除
+    this.syncQueue.delete(syncKey);
+    
+    // 5分钟后清理结果缓存
+    setTimeout(() => {
+      this.syncResults.delete(syncKey);
+    }, 5 * 60 * 1000);
   }
 
   /**
