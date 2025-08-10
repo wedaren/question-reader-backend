@@ -565,12 +565,12 @@ class KbService {
               {
                 id: "what-is-programming",
                 title: "什么是编程？",
-                path: "issues/what-is-programming.md"
+                filePath: "issues/what-is-programming.md"
               },
               {
                 id: "how-to-learn",
                 title: "如何学习编程？",
-                path: "issues/how-to-learn.md"
+                filePath: "issues/how-to-learn.md"
               }
             ]
           },
@@ -581,12 +581,12 @@ class KbService {
               {
                 id: "html-basics",
                 title: "HTML 基础",
-                path: "issues/html-basics.md"
+                filePath: "issues/html-basics.md"
               },
               {
                 id: "css-basics",
                 title: "CSS 基础",
-                path: "issues/css-basics.md"
+                filePath: "issues/css-basics.md"
               }
             ]
           }
@@ -595,9 +595,9 @@ class KbService {
       focused: {
         version: "1.0.0",
         focusList: [
-          { id: "what-is-programming", priority: 1 },
-          { id: "how-to-learn", priority: 2 },
-          { id: "html-basics", priority: 3 }
+          "what-is-programming",
+          "how-to-learn",
+          "html-basics"
         ]
       },
       titles: {
